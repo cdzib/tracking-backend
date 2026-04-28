@@ -1,0 +1,32 @@
+networks: 
+  docker-laravel_laravel_network: 
+    external: true 
+ 
+services: 
+  vagonetas_backend-web: 
+    build: 
+      context: . 
+      dockerfile: dockerfiles/nginx.dockerfile 
+    ports: 
+      - 8081:80 
+    volumes: 
+      - ./src:/var/www/html:cached
+      - ./nginx-vagonetas_backend.conf:/etc/nginx/conf.d/default.conf:ro 
+    depends_on: 
+      - vagonetas_backend-php 
+    container_name: vagonetas_backend-web 
+    networks: 
+      - docker-laravel_laravel_network 
+ 
+  vagonetas_backend-php: 
+    build: 
+      context: . 
+      dockerfile: dockerfiles/php.dockerfile 
+    ports:
+      - 8082:8082
+      - 5055:5055 
+    volumes: 
+      - ./src:/var/www/html:delegated 
+    container_name: vagonetas_backend-php 
+    networks: 
+      - docker-laravel_laravel_network 
