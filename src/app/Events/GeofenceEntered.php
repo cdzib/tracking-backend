@@ -37,7 +37,7 @@ class GeofenceEntered implements ShouldBroadcast
     {
         return [
             'vehicle_id' => $this->vehicle->id,
-            'plate' => $this->vehicle->license_plate,
+            'plate' => $this->vehicle->plate,
             'geofence_name' => $this->geofence->name,
             'timestamp' => now()->toIso8601String(),
         ];
