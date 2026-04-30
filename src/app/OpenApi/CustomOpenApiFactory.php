@@ -258,7 +258,7 @@ class CustomOpenApiFactory implements OpenApiFactoryInterface
                                             'type' => 'object',
                                             'properties' => [
                                                 'id' => ['type' => 'integer', 'example' => 1],
-                                                'van_id' => ['type' => 'integer', 'example' => 2],
+                                                'vehicle_id' => ['type' => 'integer', 'example' => 2],
                                                 'route_id' => ['type' => 'integer', 'example' => 3],
                                                 'status' => ['type' => 'string', 'example' => 'active'],
                                                 'datetime' => ['type' => 'string', 'format' => 'date-time', 'example' => '2026-04-21T10:00:00Z'],

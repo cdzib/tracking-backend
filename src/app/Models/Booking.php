@@ -22,6 +22,23 @@ class Booking extends Model
         'seats' => 'array',
     ];
 
+    public static function hasOccupiedSeats(int $tripId, array $seatNumbers, ?int $exceptBookingId = null): bool
+    {
+        $query = static::where('trip_id', $tripId)
+            ->where('status', 'active')
+            ->where(function ($query) use ($seatNumbers) {
+                foreach ($seatNumbers as $seat) {
+                    $query->orWhereJsonContains('seats', ['seat' => (int) $seat]);
+                }
+        });
+
+        if ($exceptBookingId) {
+            $query->where('id', '!=', $exceptBookingId);
+        }
+
+        return $query->exists();
+    }
+
     public function trip()
     {
         return $this->belongsTo(Trip::class);

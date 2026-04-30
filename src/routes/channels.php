@@ -1,61 +1,75 @@
 <?php
 
+use App\Models\Booking;
 use Illuminate\Support\Facades\Broadcast;
-use Illuminate\Support\Facades\Log; 
+use Illuminate\Support\Facades\Log;
 
-Broadcast::channel('trip.{tripId}', function ($user, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId, [
+$canAccessTrip = function ($user, $tripId): bool {
+    if (! $user) {
+        return false;
+    }
+
+    if (method_exists($user, 'hasRole') && $user->hasRole('admin')) {
+        return true;
+    }
+
+    return Booking::where('trip_id', $tripId)
+        ->where('passenger_id', $user->id)
+        ->where('status', 'active')
+        ->exists();
+};
+
+Broadcast::channel('trip.{tripId}', function ($user, $tripId) use ($canAccessTrip) {
+    Log::info('[Broadcast] trip channel auth', [
         'user_id' => $user?->id,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId,
+        'channel' => 'trip.' . $tripId,
     ]);
-    return true; // O verifica si el usuario puede ver el viaje
+
+    return $canAccessTrip($user, $tripId);
 });
 
-
-Broadcast::channel('trip.{tripId}.status', function ($user = null, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId . '.status', [
+Broadcast::channel('trip.{tripId}.status', function ($user, $tripId) {
+    Log::info('[Broadcast] trip status channel auth', [
         'user_id' => $user?->id ?? null,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId . '.status',
+        'channel' => 'trip.' . $tripId . '.status',
     ]);
+
     return true;
 });
 
-Broadcast::channel('trip.{tripId}.chat', function ($user = null, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId . '.chat', [
+Broadcast::channel('trip.{tripId}.chat', function ($user, $tripId) {
+    Log::info('[Broadcast] trip chat channel auth', [
         'user_id' => $user?->id ?? null,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId . '.chat',
+        'channel' => 'trip.' . $tripId . '.chat',
     ]);
+
     return true;
 });
 
-Broadcast::channel('trip.{tripId}.alerts', function ($user = null, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId . '.alerts', [
+Broadcast::channel('trip.{tripId}.alerts', function ($user, $tripId) {
+    Log::info('[Broadcast] trip alerts channel auth', [
         'user_id' => $user?->id ?? null,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId . '.alerts',
+        'channel' => 'trip.' . $tripId . '.alerts',
     ]);
+
     return true;
 });
 
 Broadcast::channel('user.{userId}', function ($user, $userId) {
-    Log::info('[Broadcast] Intento de conexión al canal user.' . $userId, [
+    Log::info('[Broadcast] user channel auth', [
         'user_id' => $user?->id,
-        'user' => $user?->name ?? null,
-        'canal' => 'user.' . $userId,
+        'channel' => 'user.' . $userId,
     ]);
+
     return (int) $user->id === (int) $userId;
 });
 
-// Canal de presencia para monitoreo de usuarios conectados a viajes
 Broadcast::channel('trips.presence', function ($user) {
-    Log::info('[Broadcast] Intento de conexión al canal trips.presence', [
+    Log::info('[Broadcast] trips presence channel auth', [
         'user_id' => $user?->id,
-        'user' => $user?->name ?? null,
-        'canal' => 'trips.presence',
+        'channel' => 'trips.presence',
     ]);
+
     return [
         'id' => $user->id,
         'name' => $user->name,
@@ -63,13 +77,16 @@ Broadcast::channel('trips.presence', function ($user) {
     ];
 });
 
-// Canal de presencia por viaje para monitoreo de usuarios conectados a un viaje específico
-Broadcast::channel('trip.{tripId}.presence', function ($user, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId . '.presence', [
+Broadcast::channel('trip.{tripId}.presence', function ($user, $tripId) use ($canAccessTrip) {
+    Log::info('[Broadcast] trip presence channel auth', [
         'user_id' => $user?->id,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId . '.presence',
+        'channel' => 'trip.' . $tripId . '.presence',
     ]);
+
+    if (! $canAccessTrip($user, $tripId)) {
+        return false;
+    }
+
     return [
         'id' => $user->id,
         'name' => $user->name,
@@ -77,23 +94,20 @@ Broadcast::channel('trip.{tripId}.presence', function ($user, $tripId) {
     ];
 });
 
-
-// Canal global para sincronización de datos entre apps
 Broadcast::channel('apps.sync', function ($user = null) {
-    Log::info('[Broadcast] Intento de conexión al canal apps.sync', [
+    Log::info('[Broadcast] apps sync channel auth', [
         'user_id' => $user?->id ?? null,
-        'user' => $user?->name ?? null,
-        'canal' => 'apps.sync',
+        'channel' => 'apps.sync',
     ]);
+
     return true;
 });
 
-// Canal de sincronización por viaje
-Broadcast::channel('trip.{tripId}.sync', function ($user = null, $tripId) {
-    Log::info('[Broadcast] Intento de conexión al canal trip.' . $tripId . '.sync', [
+Broadcast::channel('trip.{tripId}.sync', function ($user, $tripId) {
+    Log::info('[Broadcast] trip sync channel auth', [
         'user_id' => $user?->id ?? null,
-        'user' => $user?->name ?? null,
-        'canal' => 'trip.' . $tripId . '.sync',
+        'channel' => 'trip.' . $tripId . '.sync',
     ]);
+
     return true;
 });

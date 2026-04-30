@@ -24,12 +24,14 @@ class BookingsTable
                     ->label('Ruta'),
                 TextColumn::make('trip.vehicle.plate')
                     ->label('Placa'),
+                TextColumn::make('trip.vehicle.capacity')
+                    ->label('Capacidad'),
                 TextColumn::make('passenger.name')
                     ->label('Passenger')
                     ->searchable()
                     ->sortable(),
                 TextColumn::make('seats')
-                    ->label('Asientos')
+                    ->label('Asientos Ocupados')
                     ->formatStateUsing(function ($state) {
                         $asientos = [];
                         if (is_string($state)) {

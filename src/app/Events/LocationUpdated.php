@@ -26,7 +26,7 @@ class LocationUpdated implements ShouldBroadcast
         $this->location = $location;
         Log::info('[LocationUpdated] Evento emitido', [
             'vehicle_id' => $vehicle->id,
-            'plate' => $vehicle->license_plate,
+            'plate' => $vehicle->plate,
             'lat' => $location->latitude,
             'lng' => $location->longitude,
             'payload' => $this->broadcastWith(),
@@ -47,7 +47,7 @@ class LocationUpdated implements ShouldBroadcast
     {
         return [
             'vehicle_id' => $this->vehicle->id,
-            'plate' => $this->vehicle->license_plate,
+            'plate' => $this->vehicle->plate,
             'latitude' => $this->location->latitude,
             'longitude' => $this->location->longitude,
             'speed' => $this->location->speed,

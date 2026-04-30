@@ -21,9 +21,11 @@ class VehicleForm
                     ->options(['available' => 'Available', 'in_trip' => 'In trip', 'out_of_service' => 'Out of service'])
                     ->default('available')
                     ->required(),
-                TextInput::make('driver_id')
+                Select::make('driver_id')
+                    ->relationship('driver', 'name')
                     ->required()
-                    ->numeric(),
+                    ->preload()
+                    ->label('Driver Name'),
                 TextInput::make('lat')
                     ->numeric(),
                 TextInput::make('lng')

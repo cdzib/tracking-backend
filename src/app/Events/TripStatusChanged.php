@@ -34,7 +34,7 @@ class TripStatusChanged implements ShouldBroadcastNow
             'id' => $this->trip->id,
             'status' => $this->trip->status,
             'datetime' => $this->trip->datetime,
-            'van_id' => $this->trip->van_id,
+            'vehicle_id' => $this->trip->vehicle_id,
             'route_id' => $this->trip->route_id,
         ];
     }

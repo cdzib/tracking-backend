@@ -16,7 +16,7 @@ class GpsProcessingService
      */
     public function processLocation(GpsDevice $device, VehicleLocation $location)
     {
-        $this->detectSpeeching($device, $location);
+        $this->detectSpeeding($device, $location);
         $this->detectHarshBraking($device, $location);
         $this->checkGeofences($device, $location);
         $this->updateMovementStatus($device, $location);
@@ -25,7 +25,7 @@ class GpsProcessingService
     /**
      * Detectar exceso de velocidad
      */
-    private function detectSpeeching(GpsDevice $device, VehicleLocation $location)
+    private function detectSpeeding(GpsDevice $device, VehicleLocation $location)
     {
         $speedLimit = $device->config['speed_limit'] ?? 120; // km/h por defecto
 

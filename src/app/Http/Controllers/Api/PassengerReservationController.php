@@ -2,15 +2,16 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\BookingUpdated;
+use App\Events\SeatsOccupied;
 use App\Http\Controllers\Controller;
-use Illuminate\Http\Request;
 use App\Models\Booking;
 use App\Models\Trip;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 
 class PassengerReservationController extends Controller
 {
-    // POST /reservations
     public function store(Request $request)
     {
         $validated = $request->validate([
@@ -20,37 +21,26 @@ class PassengerReservationController extends Controller
         ]);
 
         $passenger = $request->user();
-        if (!$passenger) {
+        if (! $passenger) {
             return response()->json(['message' => 'No autenticado'], 401);
         }
 
-        // Validar que el viaje exista y esté disponible
-        $trip = \App\Models\Trip::where('id', $validated['trip_id'])
+        $trip = Trip::where('id', $validated['trip_id'])
             ->where('status', 'assigned')
             ->first();
-        if (!$trip) {
+
+        if (! $trip) {
             return response()->json(['message' => 'Viaje no disponible'], 404);
         }
 
-        // Verificar que los asientos no estén ocupados
-        $occupied = Booking::where('trip_id', $validated['trip_id'])
-            ->where(function($query) use ($validated) {
-                foreach ($validated['seats'] as $seat) {
-                    $query->orWhereJsonContains('seats', [['seat' => $seat]]);
-                }
-            })
-            ->exists();
-        if ($occupied) {
-            return response()->json(['message' => 'Uno o más asientos ya están ocupados.'], 409);
+        if (Booking::hasOccupiedSeats($validated['trip_id'], $validated['seats'])) {
+            return response()->json(['message' => 'Uno o mas asientos ya estan ocupados.'], 409);
         }
 
-        // Generar QRs únicos por asiento
-        $seats = collect($validated['seats'])->map(function($seat) {
-            return [
-                'seat' => $seat,
-                'qr'   => (string) \Illuminate\Support\Str::uuid(),
-            ];
-        })->toArray();
+        $seats = collect($validated['seats'])->map(fn ($seat) => [
+            'seat' => (int) $seat,
+            'qr' => (string) Str::uuid(),
+        ])->toArray();
 
         $booking = Booking::create([
             'trip_id' => $validated['trip_id'],
@@ -59,142 +49,159 @@ class PassengerReservationController extends Controller
             'seats' => $seats,
         ]);
 
-        // Aquí puedes emitir eventos si es necesario
+        broadcast(new SeatsOccupied($validated['trip_id'], $seats))->toOthers();
+
+        foreach ($seats as $seat) {
+            broadcast(new \App\Events\SeatStatusChanged(
+                $validated['trip_id'],
+                $seat['seat'],
+                'occupied',
+                $passenger->id,
+            ))->toOthers();
+        }
+
+        broadcast(new BookingUpdated($booking, 'created'))->toOthers();
 
         return response()->json($booking, 201);
     }
 
-    // GET /my-trips
     public function myTrips(Request $request)
     {
-        $passenger = $request->user();
-        if (!$passenger) {
-            return response()->json(['message' => 'No autenticado'], 401);
-        }
-
-        $perPage = $request->input('per_page', 15);
-        $status = $request->input('status');
-        $query = \App\Models\Booking::with(['trip.vehicle', 'trip.route'])
-            ->where('passenger_id', $passenger->id);
-        if ($status) {
-            $query->where('status', $status);
-        }
-        $bookings = $query->orderByDesc('created_at')->paginate($perPage);
-
-        $bookings->getCollection()->transform(function($booking) {
-            return [
-                'booking_id' => $booking->id,
-                'status' => $booking->status,
-                'seats' => $booking->seats,
-                'trip' => [
-                    'id' => $booking->trip->id ?? null,
-                    'datetime' => $booking->trip->datetime ?? null,
-                    'status' => $booking->trip->status ?? null,
-                    'vehicle' => $booking->trip->vehicle ?? null,
-                    'route' => $booking->trip->route ?? null,
-                ],
-                'created_at' => $booking->created_at,
-            ];
-        });
-
-        return response()->json($bookings);
+        return $this->bookingsResponse($request);
     }
 
-    // GET /my-trips/next
     public function nextTrip(Request $request)
     {
         $passenger = $request->user();
-        if (!$passenger) {
+        if (! $passenger) {
             return response()->json(['message' => 'No autenticado'], 401);
         }
 
-        $now = now();
-        $booking = \App\Models\Booking::with(['trip.vehicle', 'trip.route', 'trip'])
+        $booking = Booking::with(['trip.vehicle', 'trip.route'])
             ->where('passenger_id', $passenger->id)
             ->where('status', 'active')
-            ->whereHas('trip', function($q) use ($now) {
-                $q->where('datetime', '>=', $now)->where('status', 'assigned');
-            })
+            ->whereHas('trip', fn ($query) => $query
+                ->where('datetime', '>=', now())
+                ->where('status', 'assigned'))
             ->orderByRaw('(SELECT datetime FROM trips WHERE trips.id = bookings.trip_id) asc')
             ->first();
 
-        if (!$booking) {
-            return response()->json(['message' => 'No hay próximo viaje'], 404);
+        if (! $booking) {
+            return response()->json(['message' => 'No hay proximo viaje'], 404);
         }
 
-        $result = [
-            'booking_id' => $booking->id,
-            'status' => $booking->status,
-            'seats' => $booking->seats,
-            'trip' => [
-                'id' => $booking->trip->id ?? null,
-                'datetime' => $booking->trip->datetime ?? null,
-                'status' => $booking->trip->status ?? null,
-                'vehicle' => $booking->trip->vehicle ?? null,
-                'route' => $booking->trip->route ?? null,
-            ],
-            'created_at' => $booking->created_at,
-        ];
-
-        return response()->json($result);
+        return response()->json($this->formatBooking($booking));
     }
 
-    // GET /my-trips/history
     public function history(Request $request)
     {
-        $passenger = $request->user();
-        if (!$passenger) {
+        return $this->bookingsResponse($request);
+    }
+
+    public function show($id)
+    {
+        $passenger = request()->user();
+        if (! $passenger) {
             return response()->json(['message' => 'No autenticado'], 401);
         }
 
-        $perPage = $request->input('per_page', 15);
-        $query = \App\Models\Booking::with(['trip.vehicle', 'trip.route'])
+        $booking = Booking::with(['trip.vehicle', 'trip.route'])
+            ->where('id', $id)
             ->where('passenger_id', $passenger->id)
-            ->orderByDesc('created_at');
+            ->first();
 
-        // Opcional: filtrar por estado si se pasa status
+        if (! $booking) {
+            return response()->json(['message' => 'Reservacion no encontrada'], 404);
+        }
+
+        return response()->json($this->formatBooking($booking));
+    }
+
+    public function cancel($id)
+    {
+        $passenger = request()->user();
+        if (! $passenger) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
+        $booking = Booking::where('id', $id)
+            ->where('passenger_id', $passenger->id)
+            ->first();
+
+        if (! $booking) {
+            return response()->json(['message' => 'Reservacion no encontrada'], 404);
+        }
+
+        if ($booking->status === 'cancelled') {
+            return response()->json(['message' => 'La reservacion ya esta cancelada'], 409);
+        }
+
+        $booking->update(['status' => 'cancelled']);
+
+        if (is_array($booking->seats)) {
+            foreach ($booking->seats as $seat) {
+                broadcast(new \App\Events\SeatStatusChanged(
+                    $booking->trip_id,
+                    $seat['seat'],
+                    'available',
+                    $booking->passenger_id,
+                ))->toOthers();
+            }
+        }
+
+        broadcast(new BookingUpdated($booking, 'cancelled'))->toOthers();
+
+        return response()->json(['success' => true, 'message' => 'Reservacion cancelada']);
+    }
+
+    public function recentTrips(Request $request)
+    {
+        $passenger = $request->user();
+        if (! $passenger) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
+        $limit = (int) $request->input('limit', 5);
+        $query = Booking::with(['trip.vehicle', 'trip.route'])
+            ->where('passenger_id', $passenger->id);
+
         if ($request->filled('status')) {
             $query->where('status', $request->input('status'));
         }
 
-        $bookings = $query->paginate($perPage);
+        return response()->json(
+            $query->orderByDesc('created_at')
+                ->limit($limit)
+                ->get()
+                ->map(fn (Booking $booking) => $this->formatBooking($booking))
+        );
+    }
 
-        $bookings->getCollection()->transform(function($booking) {
-            return [
-                'booking_id' => $booking->id,
-                'status' => $booking->status,
-                'seats' => $booking->seats,
-                'trip' => [
-                    'id' => $booking->trip->id ?? null,
-                    'datetime' => $booking->trip->datetime ?? null,
-                    'status' => $booking->trip->status ?? null,
-                    'vehicle' => $booking->trip->vehicle ?? null,
-                    'route' => $booking->trip->route ?? null,
-                ],
-                'created_at' => $booking->created_at,
-            ];
-        });
+    private function bookingsResponse(Request $request)
+    {
+        $passenger = $request->user();
+        if (! $passenger) {
+            return response()->json(['message' => 'No autenticado'], 401);
+        }
+
+        $query = Booking::with(['trip.vehicle', 'trip.route'])
+            ->where('passenger_id', $passenger->id);
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $bookings = $query->orderByDesc('created_at')
+            ->paginate($request->input('per_page', 15));
+
+        $bookings->getCollection()->transform(fn (Booking $booking) => $this->formatBooking($booking));
 
         return response()->json($bookings);
     }
 
-    // GET /reservations/{id}
-    public function show($id)
+    private function formatBooking(Booking $booking): array
     {
-        $passenger = request()->user();
-        if (!$passenger) {
-            return response()->json(['message' => 'No autenticado'], 401);
-        }
-
-        $booking = \App\Models\Booking::with(['trip.vehicle', 'trip.route'])
-            ->where('id', $id)
-            ->where('passenger_id', $passenger->id)
-            ->first();
-        if (!$booking) {
-            return response()->json(['message' => 'Reservación no encontrada'], 404);
-        }
-
-        $result = [
+        return [
             'booking_id' => $booking->id,
             'status' => $booking->status,
             'seats' => $booking->seats,
@@ -207,70 +214,5 @@ class PassengerReservationController extends Controller
             ],
             'created_at' => $booking->created_at,
         ];
-
-        return response()->json($result);
-    }
-
-    // PATCH /reservations/{id}/cancel
-    public function cancel($id)
-    {
-        $passenger = request()->user();
-        if (!$passenger) {
-            return response()->json(['message' => 'No autenticado'], 401);
-        }
-
-        $booking = \App\Models\Booking::where('id', $id)
-            ->where('passenger_id', $passenger->id)
-            ->first();
-        if (!$booking) {
-            return response()->json(['message' => 'Reservación no encontrada'], 404);
-        }
-        if ($booking->status === 'cancelled') {
-            return response()->json(['message' => 'La reservación ya está cancelada'], 409);
-        }
-
-        $booking->status = 'cancelled';
-        $booking->save();
-
-        // Aquí puedes emitir eventos si es necesario
-
-        return response()->json(['success' => true, 'message' => 'Reservación cancelada']);
-    }
-
-     // GET /recent-trips
-    public function recentTrips(Request $request)
-    {
-        $passenger = $request->user();
-        if (!$passenger) {
-            return response()->json(['message' => 'No autenticado'], 401);
-        }
-
-        $limit = (int) $request->input('limit', 5); // Por defecto 5
-        $status = $request->input('status'); // Opcional: filtrar por estado
-
-        $query = \App\Models\Booking::with(['trip.vehicle', 'trip.route'])
-            ->where('passenger_id', $passenger->id);
-        if ($status) {
-            $query->where('status', $status);
-        }
-        $bookings = $query->orderByDesc('created_at')->limit($limit)->get();
-
-        $result = $bookings->map(function($booking) {
-            return [
-                'booking_id' => $booking->id,
-                'status' => $booking->status,
-                'seats' => $booking->seats,
-                'trip' => [
-                    'id' => $booking->trip->id ?? null,
-                    'datetime' => $booking->trip->datetime ?? null,
-                    'status' => $booking->trip->status ?? null,
-                    'vehicle' => $booking->trip->vehicle ?? null,
-                    'route' => $booking->trip->route ?? null,
-                ],
-                'created_at' => $booking->created_at,
-            ];
-        });
-
-        return response()->json($result);
     }
 }
