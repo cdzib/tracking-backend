@@ -16,10 +16,27 @@ class GpsDeviceForm
             ->components([
 
                 Map::make('location')
-                    ->height('300px')
-                    ->label('Última ubicación'),
+                    ->label('Ubicación')
+                    ->defaultLocation([20.9674, -89.5926])
+                    ->draggable()
+                    ->clickable()
+                    ->height('400px')
+                    ->columnSpanFull()
+                    ->afterStateHydrated(function (callable $set, $record) {
+                        if ($record?->latitude && $record?->longitude) {
+                            $set('location', [
+                                'lat' => (float) $record->latitude,
+                                'lng' => (float) $record->longitude,
+                            ]);
+                        }
+                    })
+                    ->afterStateUpdated(function ($state, callable $set) {
+                        $set('latitude',  $state['lat']);
+                        $set('longitude', $state['lng']);
+                    })
+                    ->dehydrated(false),
                 Select::make('vehicle_id')
-                    ->relationship('vehicle', 'id')
+                    ->relationship('vehicle', 'plate')
                     ->required(),
                 TextInput::make('imei')
                     ->required(),
@@ -32,9 +49,12 @@ class GpsDeviceForm
                     ->required()
                     ->default('Generic'),
                 TextInput::make('latitude')
-                    ->numeric(),
+                    ->numeric()
+                    ->readOnly(),
+
                 TextInput::make('longitude')
-                    ->numeric(),
+                    ->numeric()
+                    ->readOnly(),
                 TextInput::make('altitude')
                     ->numeric(),
                 TextInput::make('speed')
@@ -48,12 +68,12 @@ class GpsDeviceForm
                 DateTimePicker::make('last_update'),
                 Select::make('status')
                     ->options([
-            'active' => 'Active',
-            'idle' => 'Idle',
-            'offline' => 'Offline',
-            'maintenance' => 'Maintenance',
-            'lost' => 'Lost',
-        ])
+                        'active' => 'Active',
+                        'idle' => 'Idle',
+                        'offline' => 'Offline',
+                        'maintenance' => 'Maintenance',
+                        'lost' => 'Lost',
+                    ])
                     ->default('active')
                     ->required(),
                 TextInput::make('battery_level')

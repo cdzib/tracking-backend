@@ -9,7 +9,7 @@ use App\Filament\Admin\Resources\Roles\Pages\ViewRole;
 use App\Filament\Admin\Resources\Roles\Schemas\RoleForm;
 use App\Filament\Admin\Resources\Roles\Schemas\RoleInfolist;
 use App\Filament\Admin\Resources\Roles\Tables\RolesTable;
-use Spatie\Permission\Models\Role;
+use App\Models\Role;
 
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -45,7 +45,7 @@ class RoleResource extends Resource
     public static function getRelations(): array
     {
         return [
-            
+            //
         ];
     }
 
@@ -57,13 +57,5 @@ class RoleResource extends Resource
             'view' => ViewRole::route('/{record}'),
             'edit' => EditRole::route('/{record}/edit'),
         ];
-    }
-
-    public static function getRecordRouteBindingEloquentQuery(): Builder
-    {
-        return parent::getRecordRouteBindingEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
     }
 }

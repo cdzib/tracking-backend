@@ -8,6 +8,7 @@ use Filament\Actions\EditAction;
 use Filament\Actions\ForceDeleteBulkAction;
 use Filament\Actions\RestoreBulkAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\TextInput;
 use Filament\Tables\Filters\TrashedFilter;
 use Filament\Tables\Table;
 
@@ -17,7 +18,8 @@ class PermissionsTable
     {
         return $table
             ->columns([
-                //
+                TextInput::make('name')->label('Name'),
+                TextInput::make('guard_name')->label('Guard Name'),
             ])
             ->filters([
                 TrashedFilter::make(),

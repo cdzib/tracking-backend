@@ -9,7 +9,7 @@ use App\Filament\Admin\Resources\Permissions\Pages\ViewPermission;
 use App\Filament\Admin\Resources\Permissions\Schemas\PermissionForm;
 use App\Filament\Admin\Resources\Permissions\Schemas\PermissionInfolist;
 use App\Filament\Admin\Resources\Permissions\Tables\PermissionsTable;
-use Spatie\Permission\Models\Permission;
+use App\Models\Permission;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -56,13 +56,5 @@ class PermissionResource extends Resource
             'view' => ViewPermission::route('/{record}'),
             'edit' => EditPermission::route('/{record}/edit'),
         ];
-    }
-
-    public static function getRecordRouteBindingEloquentQuery(): Builder
-    {
-        return parent::getRecordRouteBindingEloquentQuery()
-            ->withoutGlobalScopes([
-                SoftDeletingScope::class,
-            ]);
     }
 }
